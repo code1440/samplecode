@@ -1,43 +1,27 @@
-- name: create ec2 instances
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
+#!/usr/bin/python
 
-    - name: provision instances
-      ec2:
-        key_name: devbox
-        group: launch-wizard-4
-        region: us-east-1
-        instance_type: t2.micro
-        image: ami-0c54494f920b19106
-        #exact_count: 1
-        count_tag:
-          Name: autospin
-        instance_tags:
-          Name: autospin
-      register: ec2
+import boto3
 
-    # - name: Wait for SSH to come up
-    #   delegate_to: "{{ item.private_dns_name }}"
-    #   wait_for_connection:
-    #     delay: 30
-    #     timeout: 320
-    #   with_items: "{{ ec2.instances }}"
+regions = ['us-east-1']
 
-    - pause:
-        minutes: 1
+#instances = ec2.instances.filter#    Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
+running = {}
+for item in regions:
+        ec2 = boto3.resource('ec2',region_name=item)
+        print("Listing instances in " + item)
+        instances = ec2.instances.filter(Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
 
-    - name: create hostlist
-      add_host:
-        hostname: "{{ item.private_dns_name }}"
-        groupname: ubulaunched
-        ansible_ssh_user: ubuntu
-      with_items: "{{ ec2.instances }}"
+        for instance in instances:
 
-- name: install
-  hosts: ubulaunched
-  become: True
-  roles:
-    - tomcat
-    
+           # print("\n")
+            for tag in instance.tags:
+                for key in tag:
+                    if tag[key] == "autospin":
+                        running[instance.id] = instance.private_dns_name
+
+print running
+
+invfile=open("inventory/ansible-nodes", "a")
+
+for key in running:
+    invfile.writelines("%s ansible_host=%s\n" % (key, running[key]))
